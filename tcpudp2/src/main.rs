@@ -32,37 +32,41 @@ async fn tcp_listener() -> anyhow::Result<()> {
 }
 
 enum StreamType <'a>{
-    Tcp(TcpStream),
+    Tcp(&'a TcpStream),
     Udp(&'a async_std::net::UdpSocket),
 }
 
 // async fn processor(addr: String, bytes: Bytes, mut stream: StreamType) -> anyhow::Result<()> {
-async fn processor(addr: SocketAddr, bytes: Bytes, stream: StreamType) -> anyhow::Result<()> {
-    println!("common processor: {}: {:?}", addr, bytes);
+// async fn processor<'a>(addr: SocketAddr, bytes: Bytes, stream: &'a StreamType) -> anyhow::Result<()> {
+
+async fn send_bytes<'a> (addr: SocketAddr, stream: &StreamType<'a>, bytes: Bytes) -> anyhow::Result<()> {
     match stream {
         StreamType::Tcp(mut stream) => {
             println!("tcp write");
             stream.write_all(&bytes.slice(..)).await;
         },
         StreamType::Udp(stream) => {
+            println!("udp write");
             stream.send_to(&bytes.slice(..), &addr).await;
         }
     }
+
+    Ok(())
+}
+async fn processor<'a>( addr: SocketAddr, bytes: Bytes, stream: &StreamType<'a>) -> anyhow::Result<()> {
+    println!("common processor: {}: {:?}", addr, bytes);
+    // some logics...
+    send_bytes(addr, stream, Bytes::copy_from_slice(b"hello_world")).await;
     return Ok(())
 }
 
-async fn ttt(addr: SocketAddr, wow: &async_std::net::UdpSocket) {
-    wow.send_to(b"hi", &addr).await;
-}
 async fn udp_listener() -> anyhow::Result<()> {
     let listener = net::UdpSocket::bind("0.0.0.0:4445").await?;
     // let mut table = HashMap::<SocketAddr, Sender<Bytes>>::new();
     let mut buffer = [0u8; 10];
     while let Ok((size, addr)) = listener.recv_from(&mut buffer).await {
         println!("udp data {}, {:?}", addr, &buffer[..size]);
-        // ttt(addr, &listener).await; // 이건 되는데
-        // 이거 호출하고 싶따고... listener 수명어떻게 해결함??
-        processor(addr, Bytes::copy_from_slice(&buffer[..size]), StreamType::Udp(&listener)).await;
+        processor(addr, Bytes::copy_from_slice(&buffer[..size]), &StreamType::Udp(&listener)).await;
     }
     Ok(())
 }
@@ -78,9 +82,7 @@ async fn connection(addr: SocketAddr, mut stream: TcpStream) {
             }
             Ok(n) => {
                 println!("recv tcp: {:?}", &buf[..n]);
-                // stream.write_all(b"thisis").await;
-                // processor(addr.to_string(), Bytes::copy_from_slice(&buf[..n]), &StreamType::Tcp(&stream));
-                processor(addr, Bytes::copy_from_slice(&buf[..n]), StreamType::Tcp(stream.clone())).await;
+                processor(addr, Bytes::copy_from_slice(&buf[..n]), &StreamType::Tcp(&stream)).await;
             }
             Err(e) => {
                 println!("failed to read from socket; err = {:?}", e);
