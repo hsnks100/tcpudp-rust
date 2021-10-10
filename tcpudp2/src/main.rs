@@ -31,10 +31,9 @@ async fn tcp_listener() -> anyhow::Result<()> {
     Ok(())
 }
 
-enum StreamType {
+enum StreamType <'a>{
     Tcp(TcpStream),
-    Udp(async_std::net::UdpSocket),
-    // Udp(&'a async_std::net::UdpSocket),
+    Udp(&'a async_std::net::UdpSocket),
 }
 
 // async fn processor(addr: String, bytes: Bytes, mut stream: StreamType) -> anyhow::Result<()> {
@@ -46,12 +45,14 @@ async fn processor(addr: SocketAddr, bytes: Bytes, stream: StreamType) -> anyhow
             stream.write_all(&bytes.slice(..)).await;
         },
         StreamType::Udp(stream) => {
-            stream.send_to(&bytes.slice(..), &addr);
-            // println!("ww");
-            // println!("udp write");
+            stream.send_to(&bytes.slice(..), &addr).await;
         }
     }
     return Ok(())
+}
+
+async fn ttt(addr: SocketAddr, wow: &async_std::net::UdpSocket) {
+    wow.send_to(b"hi", &addr).await;
 }
 async fn udp_listener() -> anyhow::Result<()> {
     let listener = net::UdpSocket::bind("0.0.0.0:4445").await?;
@@ -59,8 +60,9 @@ async fn udp_listener() -> anyhow::Result<()> {
     let mut buffer = [0u8; 10];
     while let Ok((size, addr)) = listener.recv_from(&mut buffer).await {
         println!("udp data {}, {:?}", addr, &buffer[..size]);
+        // ttt(addr, &listener).await; // 이건 되는데
         // 이거 호출하고 싶따고... listener 수명어떻게 해결함??
-        // processor(addr, Bytes::copy_from_slice(&buffer[..size]), StreamType::Udp(listener)).await;
+        processor(addr, Bytes::copy_from_slice(&buffer[..size]), StreamType::Udp(&listener)).await;
     }
     Ok(())
 }
