@@ -50,13 +50,15 @@ async fn send_bytes<'a> (addr: SocketAddr, stream: &StreamType<'a>, bytes: Bytes
             stream.send_to(&bytes.slice(..), &addr).await;
         }
     }
-
     Ok(())
 }
 async fn processor<'a>( addr: SocketAddr, bytes: Bytes, stream: &StreamType<'a>) -> anyhow::Result<()> {
     println!("common processor: {}: {:?}", addr, bytes);
     // some logics...
-    send_bytes(addr, stream, Bytes::copy_from_slice(b"hello_world")).await;
+    // 첫글자가 k 면 hello_world 보내주기.
+    if bytes[0] == 'k' as u8 {
+        send_bytes(addr, stream, Bytes::copy_from_slice(b"hello_world")).await;
+    }
     return Ok(())
 }
 
