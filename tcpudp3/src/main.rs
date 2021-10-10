@@ -12,9 +12,9 @@ use std::task::{Context, Poll};
 use bytes::Bytes;
 use bytes::BytesMut;
 
-enum BroadcastCommand {
-    SendMessage(Bytes),
-    Exit,
+enum Command {
+    Send(SocketAddr),
+    EXIT,
 }
 
 fn main() {
@@ -38,11 +38,11 @@ async fn tcp_listener() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn processor( addr: SocketAddr, bytes: Bytes, sender: Sender<SocketAddr>) -> anyhow::Result<()> {
+async fn processor( addr: SocketAddr, bytes: Bytes, sender: Sender<Command>) -> anyhow::Result<()> {
     println!("common processor: {}: {:?}", addr, bytes);
     // some logics...
     // 첫글자가 k 면 hello_world 보내주기.
-    sender.send(addr).await.unwrap();
+    sender.send(Command::Send(addr)).await.unwrap();
     if bytes[0] == 'k' as u8 {
     }
     return Ok(())
@@ -50,18 +50,30 @@ async fn processor( addr: SocketAddr, bytes: Bytes, sender: Sender<SocketAddr>) 
 
 
 
-async fn tcp_send(mut stream: TcpStream, recv: Receiver<SocketAddr>) {
+async fn tcp_send(mut stream: TcpStream, recv: Receiver<Command>) {
     loop {
-        recv.recv().await.unwrap();
-        stream.write_all(b"hello tcp").await;
+        match recv.recv().await.unwrap() {
+            Command::Send(addr) => {
+                stream.write_all(b"hello tcp").await;
+            }, 
+            Command::EXIT => {
+                break;
+            }, 
+        }
     }
 }
 
-async fn udp_send(stream: Arc<net::UdpSocket>, r: Receiver<SocketAddr>) {
+async fn udp_send(stream: Arc<net::UdpSocket>, r: Receiver<Command>) {
     loop {
-        let addr = r.recv().await.unwrap();
+        match r.recv().await.unwrap() {
+            Command::Send(addr) => {
+                stream.send_to(&Bytes::copy_from_slice(b"hello"), &addr).await; // .await 써야하는데...
+            }, 
+            Command::EXIT => {
+                break;
+            }, 
+        }
         // println!("{}", r.recv().await.unwrap());
-        stream.send_to(&Bytes::copy_from_slice(b"hello"), &addr).await; // .await 써야하는데...
         // stream.send_to(
     }
 }
@@ -77,13 +89,14 @@ async fn udp_listener() -> anyhow::Result<()> {
     }
     Ok(())
 }
-async fn connection(addr: SocketAddr, mut stream: TcpStream, sender: Sender<SocketAddr>) {
+async fn connection(addr: SocketAddr, mut stream: TcpStream, sender: Sender<Command>) {
     let mut buf = [0; 10];
     loop {
         let n = match stream.read(&mut buf).await {
             // socket closed
             Ok(n) if n == 0 => {
                 println!("failed to read from socket;");
+                sender.send(Command::EXIT).await.unwrap();
                 break;
             }
             Ok(n) => {
