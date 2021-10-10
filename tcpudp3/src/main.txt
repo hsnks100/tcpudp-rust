@@ -1,0 +1,106 @@
+use async_std::channel::{Receiver, Sender, self};
+use async_std::net::{self, TcpStream};
+use async_std::task;
+use async_std::io::WriteExt;
+use futures::{AsyncRead, AsyncReadExt, Stream, StreamExt};
+
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use bytes::Bytes;
+use bytes::BytesMut;
+
+enum BroadcastCommand {
+    SendMessage(Bytes),
+    Exit,
+}
+
+fn main() {
+    async_std::task::block_on(start_service());
+}
+
+async fn start_service() -> anyhow::Result<()> {
+    futures::join!(tcp_listener(), udp_listener());
+    Ok(())
+}
+
+async fn tcp_listener() -> anyhow::Result<()> {
+    let listener = net::TcpListener::bind("0.0.0.0:4444").await?;
+    while let Ok((conn, addr)) = listener.accept().await {
+        println!("tcp connected {}", addr);
+        async_std::task::spawn(connection(addr, conn.clone()));
+    }
+
+    Ok(())
+}
+
+async fn processor( addr: SocketAddr, bytes: Bytes, sender: Sender<i32>) -> anyhow::Result<()> {
+    println!("common processor: {}: {:?}", addr, bytes);
+    // some logics...
+    // 첫글자가 k 면 hello_world 보내주기.
+    sender.send(5050).await.unwrap();
+    if bytes[0] == 'k' as u8 {
+    }
+    return Ok(())
+}
+
+
+
+async fn sender_per_client(recv: Receiver<i32>, sender: Sender<i32>) {
+    loop {
+        recv.recv().await.unwrap();
+
+    }
+}
+
+async fn udp_send(stream: &net::UdpSocket, r: Receiver<i32>) {
+    loop {
+        println!("{}", r.recv().await.unwrap());
+    }
+}
+async fn udp_listener() -> anyhow::Result<()> {
+    let listener = net::UdpSocket::bind("0.0.0.0:4445").await?;
+    let (asm_sender, asm_recver) = channel::unbounded(); 
+    async_std::task::spawn(udp_send(&listener, asm_recver));
+
+    let mut buffer = [0u8; 10];
+    while let Ok((size, addr)) = listener.recv_from(&mut buffer).await {
+        println!("udp data {}, {:?}", addr, &buffer[..size]);
+        processor(addr, Bytes::copy_from_slice(&buffer[..size]), asm_sender.clone()).await;
+    
+        // let closure = |ad: SocketAddr, stream: &async_std::net::UdpSocket| {
+        //     println!("Hello from async closure. {:?}", &ad);
+        //     async move{
+        //         stream.send_to(&Bytes::copy_from_slice(b"hello"), &ad).await; // .await 써야하는데...
+        //     }
+        // };
+        // closure(addr); // .await;
+        // closure(addr);
+        // processor(addr, Bytes::copy_from_slice(&buffer[..size]), &closure).await;
+        // processor(addr, Bytes::copy_from_slice(&buffer[..size]), closure).await;
+    }
+    Ok(())
+}
+async fn connection(addr: SocketAddr, mut stream: TcpStream) {
+    let mut buf = [0; 10];
+    loop {
+        let n = match stream.read(&mut buf).await {
+            // socket closed
+            Ok(n) if n == 0 => {
+                println!("failed to read from socket;");
+                break;
+            }
+            Ok(n) => {
+                println!("recv tcp: {:?}", &buf[..n]);
+                let (asm_sender, asm_recver) = channel::unbounded(); 
+                processor(addr, Bytes::copy_from_slice(&buf[..n]), asm_sender.clone()).await;
+            }
+            Err(e) => {
+                println!("failed to read from socket; err = {:?}", e);
+                break;
+            }
+        };
+    }
+}
