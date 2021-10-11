@@ -1,9 +1,9 @@
 use async_std::io::WriteExt;
 use async_std::net::{self, TcpListener, TcpStream};
-use futures::AsyncReadExt;
 use async_std::task;
+use futures::AsyncReadExt;
 
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use std::net::SocketAddr;
 
@@ -18,7 +18,10 @@ async fn entrypoint() -> anyhow::Result<()> {
     let tcp_listener = net::TcpListener::bind("0.0.0.0:4444").await?;
     let udp_listener = net::UdpSocket::bind("0.0.0.0:4445").await?;
 
-    let mut tcp = Tcp{tcp_listener: tcp_listener, tcp_stream: Option::None};
+    let mut tcp = Tcp {
+        tcp_listener: tcp_listener,
+        tcp_stream: Option::None,
+    };
     let mut udp = Udp(udp_listener);
 
     let tcp_fut = tcp.listen();
@@ -27,24 +30,31 @@ async fn entrypoint() -> anyhow::Result<()> {
     Ok(())
 }
 
-
 struct Tcp {
     tcp_listener: TcpListener,
     tcp_stream: Option<TcpStream>,
 }
 struct Udp(async_std::net::UdpSocket);
+struct Parser {
+
+}
+impl Parser {
+    async fn processor(&self, addr: SocketAddr, bytes: Bytes) {
+        println!("parser processor {:?}, {:?}", addr, bytes);
+    }
+}
 
 #[async_trait]
 trait Listener {
     async fn listen(&mut self) -> anyhow::Result<()>;
-    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) ->anyhow::Result<()>;
+    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()>;
     // tcp, udp 동시에 처리하는 프로세서.
     async fn processor(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
         if bytes[0] == 'k' as u8 {
             self.send(addr, Bytes::copy_from_slice(b"k-start")).await?;
-
         }
-        self.send(addr, Bytes::copy_from_slice(b"i'am processor")).await?;
+        self.send(addr, Bytes::copy_from_slice(b"i'am processor"))
+            .await?;
         Ok(())
     }
 }
@@ -56,21 +66,22 @@ impl Listener for Tcp {
             println!("tcp connected {}", addr);
             // let self_copy = Arc::new(&self); //.clone();
             self.tcp_stream = Option::Some(tcp_stream.clone());
-            let mut ee = Arc::new(Mutex::new(self));
+            // let ee = Arc::new(Mutex::new(self));
             // let e3: i32 = ee;
-            async_std::task::spawn(connection(addr, tcp_stream.clone(), Arc::clone(&ee))); // .await;
+            let parser = Parser{};
+            async_std::task::spawn(connection(addr, tcp_stream.clone(), parser)); // .await;
         }
         Ok(())
     }
-    
-    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) ->anyhow::Result<()> {
+
+    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
         let ts = self.tcp_stream.clone();
         match ts {
             Option::Some(mut stream) => {
                 println!("tcp send");
                 stream.write_all(&bytes.slice(..)).await?
                 // stream.write_all()
-            },
+            }
             Option::None => {
                 println!("tcp None");
             }
@@ -79,7 +90,6 @@ impl Listener for Tcp {
     }
 }
 
-
 #[async_trait]
 impl Listener for Udp {
     async fn listen(&mut self) -> anyhow::Result<()> {
@@ -87,17 +97,22 @@ impl Listener for Udp {
         while let Ok((size, addr)) = self.0.recv_from(&mut buffer).await {
             println!("udp data {}, {:?}", addr, &buffer[..size]);
             let bytes = Bytes::copy_from_slice(&buffer[..size]);
-            self.processor(addr, bytes).await?;
+            let parser = Parser{};            
+            parser.processor(addr, bytes).await;            
         }
         Ok(())
     }
-    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) ->anyhow::Result<()> {
+    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
         self.0.send_to(&bytes.slice(..), &addr).await?;
         Ok(())
     }
 }
 
-async fn connection(addr: SocketAddr, mut tcp_stream: TcpStream, tcp_socket: Arc<Mutex<&mut Tcp>>) -> anyhow::Result<()> {
+async fn connection(
+    addr: SocketAddr,
+    mut tcp_stream: TcpStream,
+    parser: Parser,
+) -> anyhow::Result<()> {
     let mut buf = [0; 10];
     // self.test_int = 55;
     // self.tcp_stream = Some(tcp_stream.clone());
@@ -112,8 +127,9 @@ async fn connection(addr: SocketAddr, mut tcp_stream: TcpStream, tcp_socket: Arc
                 println!("recv tcp: {:?}", &buf[..n]);
                 println!("tcp write");
                 let bytes = Bytes::copy_from_slice(&buf[..n]);
-                let mut t = tcp_socket.lock().unwrap();
-                t.send(addr, bytes).await?;
+                parser.processor(addr, bytes).await;
+                // let mut t = tcp_socket.lock().unwrap();
+                // t.send(addr, bytes).await?;
                 // tcp_stream.write_all(&bytes.slice(..)).await?;
             }
             Err(e) => {
