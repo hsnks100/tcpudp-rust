@@ -1,17 +1,14 @@
 use async_std::io::WriteExt;
 use async_std::net::{self, TcpListener, TcpStream};
-use async_std::task;
 use futures::AsyncReadExt;
-
-use std::sync::{Arc, Mutex};
-
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use bytes::Bytes;
 
-fn main() {
-    async_std::task::block_on(entrypoint());
+fn main() -> anyhow::Result<()> {
+    async_std::task::block_on(entrypoint())?;
+    Ok(())
 }
 
 async fn entrypoint() -> anyhow::Result<()> {
@@ -35,28 +32,16 @@ struct Tcp {
     tcp_stream: Option<TcpStream>,
 }
 struct Udp(async_std::net::UdpSocket);
-struct Parser {
 
-}
-impl Parser {
-    async fn processor(&self, addr: SocketAddr, bytes: Bytes) {
-        println!("parser processor {:?}, {:?}", addr, bytes);
-    }
-}
+// enum SocketType {
+//     async_std::net::UdpSocket(ss),
+    
+// }
+
 
 #[async_trait]
 trait Listener {
-    async fn listen(&mut self) -> anyhow::Result<()>;
-    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()>;
-    // tcp, udp 동시에 처리하는 프로세서.
-    async fn processor(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
-        if bytes[0] == 'k' as u8 {
-            self.send(addr, Bytes::copy_from_slice(b"k-start")).await?;
-        }
-        self.send(addr, Bytes::copy_from_slice(b"i'am processor"))
-            .await?;
-        Ok(())
-    }
+    async fn listen(&mut self) -> anyhow::Result<()>;   
 }
 
 #[async_trait]
@@ -73,23 +58,24 @@ impl Listener for Tcp {
         }
         Ok(())
     }
-
-    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
-        let ts = self.tcp_stream.clone();
-        match ts {
-            Option::Some(mut stream) => {
-                println!("tcp send");
-                stream.write_all(&bytes.slice(..)).await?
-                // stream.write_all()
-            }
-            Option::None => {
-                println!("tcp None");
-            }
-        }
-        Ok(())
-    }
 }
 
+enum StreamType <'a>{
+    Tcp(&'a TcpStream),
+    Udp(&'a async_std::net::UdpSocket),
+}
+
+async fn sender<'a>(st: &StreamType<'a>, addr: SocketAddr, bytes: Bytes) ->anyhow::Result<()> {
+    match st {
+        StreamType::Tcp(mut stream) => {
+            stream.write_all(&bytes.slice(..)).await?;
+        },
+        StreamType::Udp(stream) => {
+            stream.send_to(&bytes.slice(..), &addr).await?;
+        },
+    }
+    Ok(())
+}
 #[async_trait]
 impl Listener for Udp {
     async fn listen(&mut self) -> anyhow::Result<()> {
@@ -97,13 +83,10 @@ impl Listener for Udp {
         while let Ok((size, addr)) = self.0.recv_from(&mut buffer).await {
             println!("udp data {}, {:?}", addr, &buffer[..size]);
             let bytes = Bytes::copy_from_slice(&buffer[..size]);
-            let parser = Parser{};            
-            parser.processor(addr, bytes).await;            
+            let parser = Parser{};
+            
+            parser.processor(addr, bytes, &StreamType::Udp(&self.0)).await?;            
         }
-        Ok(())
-    }
-    async fn send(&mut self, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
-        self.0.send_to(&bytes.slice(..), &addr).await?;
         Ok(())
     }
 }
@@ -117,7 +100,7 @@ async fn connection(
     // self.test_int = 55;
     // self.tcp_stream = Some(tcp_stream.clone());
     loop {
-        let n = match tcp_stream.read(&mut buf).await {
+        match tcp_stream.read(&mut buf).await {
             // socket closed
             Ok(n) if n == 0 => {
                 println!("failed to read from socket;");
@@ -127,10 +110,7 @@ async fn connection(
                 println!("recv tcp: {:?}", &buf[..n]);
                 println!("tcp write");
                 let bytes = Bytes::copy_from_slice(&buf[..n]);
-                parser.processor(addr, bytes).await;
-                // let mut t = tcp_socket.lock().unwrap();
-                // t.send(addr, bytes).await?;
-                // tcp_stream.write_all(&bytes.slice(..)).await?;
+                parser.processor(addr, bytes, &StreamType::Tcp(&tcp_stream)).await?;
             }
             Err(e) => {
                 println!("failed to read from socket; err = {:?}", e);
@@ -139,4 +119,16 @@ async fn connection(
         };
     }
     Ok(())
+}
+
+struct Parser {
+
+}
+impl Parser {
+    async fn processor<'a>(&self, addr: SocketAddr, bytes: Bytes, stream_type: &StreamType<'a>) -> anyhow::Result<()> 
+    {
+        println!("parser processor {:?}, {:?}", addr, bytes);
+        sender(stream_type, addr, Bytes::copy_from_slice(b"i'm proc")).await?;
+        Ok(())        
+    }
 }
