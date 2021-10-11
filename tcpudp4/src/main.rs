@@ -17,7 +17,6 @@ async fn entrypoint() -> anyhow::Result<()> {
 
     let mut tcp = Tcp {
         tcp_listener: tcp_listener,
-        tcp_stream: Option::None,
     };
     let mut udp = Udp(udp_listener);
 
@@ -29,7 +28,6 @@ async fn entrypoint() -> anyhow::Result<()> {
 
 struct Tcp {
     tcp_listener: TcpListener,
-    tcp_stream: Option<TcpStream>,
 }
 struct Udp(async_std::net::UdpSocket);
 
@@ -49,10 +47,6 @@ impl Listener for Tcp {
     async fn listen(&mut self) -> anyhow::Result<()> {
         while let Ok((tcp_stream, addr)) = self.tcp_listener.accept().await {
             println!("tcp connected {}", addr);
-            // let self_copy = Arc::new(&self); //.clone();
-            self.tcp_stream = Option::Some(tcp_stream.clone());
-            // let ee = Arc::new(Mutex::new(self));
-            // let e3: i32 = ee;
             let parser = Parser{};
             async_std::task::spawn(connection(addr, tcp_stream.clone(), parser)); // .await;
         }
