@@ -8,7 +8,9 @@ edition = "2018"
 
 [dependencies]
 async-std = "*"
-futures = "*"
+futures = "0.3.1"
+
+futures-channel = "*"
 bytes = "*"
 anyhow = "*"
 pin-project = "*"
@@ -20,3 +22,5 @@ url = "2.0.0"
 env_logger = "0.9"
 log = "*"
 info = "*"
+futures-util = "*"
+task = "*"

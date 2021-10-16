@@ -1,21 +1,26 @@
 use std::{env, io::Error};
 
-use async_std::task;
-use futures::prelude::*;
-use log::info;
-use async_std::io::WriteExt;
 use async_std::net::{self, TcpListener, TcpStream};
-use futures::AsyncReadExt;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use async_trait::async_trait;
-use bytes::Bytes;
-use std::thread;
-use async_tungstenite::tungstenite::protocol::Message;
-use async_std::channel::{unbounded, Receiver, Sender};
+use async_std::task;
+use futures::{TryStreamExt, prelude::*};
+use log::info;
+// use async_std::io::WriteExt;
+use futures::join;
+use futures::prelude::*;
+// use futures::{
+//     channel::mpsc::{unbounded, UnboundedSender},
+//     future, pin_mut,
+// };
+use futures_channel::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
 
-use futures::{future, pin_mut, StreamExt};
-use futures::channel::mpsc;
+// use async_std::net::{TcpListener, TcpStream};
+// use async_std::task;
+use async_std::sync::{Arc, Mutex};
+
+use async_tungstenite::tungstenite::protocol::Message;
+
+use bytes::{Bytes, BytesMut, Buf, BufMut};
+use std::net::SocketAddr;
 
 async fn run() -> anyhow::Result<()> {
     let tcp_fut = tcp_listen();
@@ -44,7 +49,35 @@ async fn ws_listen() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn accept_connection(stream: TcpStream) {
+async fn send_recver(mut recv:  UnboundedReceiver<Message>) -> anyhow::Result<()> {
+    loop {
+        
+        let data = recv.try_next()?;
+        match data {
+            Option::Some(d) => {
+                println!("recv!!: {}", d);
+                break;
+            },
+            Option::None => {
+                println!("none!!");
+                break;
+            }
+        };
+        
+    }
+    println!("send_recver exit");
+    // recv.for_each(|result| {
+    //     println!("Got: {}", result);
+    //     Ok(())
+    // });
+    // loop {
+    //     // recv
+    //     // recv.recv().await.unwrap();
+    //     println!("recv!!");
+    // }
+    Ok(())
+}
+async fn accept_connection(stream: TcpStream) -> anyhow::Result<()> {
     let addr = stream
         .peer_addr()
         .expect("connected streams should have a peer address");
@@ -57,17 +90,26 @@ async fn accept_connection(stream: TcpStream) {
     println!("New WebSocket connection: {}", addr);
 
     let (write, read) = ws_stream.split();
+    let (tx, rx) = unbounded::<Message>(); 
     
-    // read.forward(write).await;
-    let fut = read.try_for_each(|msg| {
-        println!("Received a message from {}: {}", "hi", msg.to_text().unwrap());
-        // let mut m = &mut Message::Text("bbong".to_string());
-        // read.forward(m);
-        let (stdin_tx, stdin_rx) = mpsc::unbounded();
-        stdin_tx.unbounded_send(Message::Text("power".to_string())).unwrap();
+    let sender = send_recver(rx);
+    let fut = read.try_for_each(move |msg| {
+        
+        println!("dddd {:?}", msg);
+        if msg.is_close() {
+            println!("socket is closed");
+        } else if msg.is_text() {
+            let b = tx.is_closed();
+            println!("is_close2? : {}", b);
+            tx.unbounded_send(Message::Text("power".to_string())).unwrap(); // 이거 패닉나는데... 
+            println!("Received a message from {}: {}", "hi", msg.to_text().unwrap());
+        }
         future::ok(())
-    }).await;
+    });
+    join!(fut, sender);
     
+    println!("disconnect??");
+    Ok(())
     // future::select(fut).await;
 
     // println!("recv: {}", read.to_text().unwrap());
@@ -119,8 +161,9 @@ async fn tcp_listen() -> anyhow::Result<()> {
 
 fn main() -> anyhow::Result<()>{
 
-    task::block_on(run())
-    // Ok(())
+    task::block_on(run())?;
+    println!("exit");
+    Ok(())
 }
 
 struct Parser {}
