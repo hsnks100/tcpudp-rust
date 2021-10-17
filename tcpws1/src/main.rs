@@ -3,24 +3,13 @@ use std::{env, io::Error};
 use async_std::net::{self, TcpListener, TcpStream};
 use async_std::task;
 use futures::{TryStreamExt, prelude::*};
-use log::info;
-// use async_std::io::WriteExt;
 use futures::join;
-use futures::prelude::*;
-// use futures::{
-//     channel::mpsc::{unbounded, UnboundedSender},
-//     future, pin_mut,
-// };
 use futures_channel::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
-
-// use async_std::net::{TcpListener, TcpStream};
-// use async_std::task;
 use async_std::sync::{Arc, Mutex};
 
 use async_tungstenite::tungstenite::protocol::Message;
 use async_tungstenite::*;
 use bytes::{Bytes, BytesMut, Buf, BufMut};
-use url::form_urlencoded::Target;
 use std::net::SocketAddr;
 use futures_util::stream::*;
 
@@ -28,9 +17,7 @@ async fn run() -> anyhow::Result<()> {
     let tcp_fut = tcp_listen();
     let ws_fut = ws_listen();
     futures::try_join!(tcp_fut, ws_fut)?;
-
-    Ok(())
-    
+    Ok(())    
 }
 
 async fn ws_listen() -> anyhow::Result<()> {
@@ -62,23 +49,25 @@ async fn send_recver(recv:  Arc<Mutex<UnboundedReceiver<Message>>>, mut wss: Spl
         println!("Some!!: {:?}", data);
         let org = data.into_text().unwrap();
         
-        let ksoo = Message::Text(">echo: ".to_string() + org.as_str());
+        let ksoo = Message::Text(org);
         wss.send(ksoo).await?;
     }
     println!("============ send_recver end =========");
     Ok(())
 }
 
-async fn ws_loop(maddr: SocketAddr, mut wss_recv: SplitStream<WebSocketStream<TcpStream>>, mut tx: UnboundedSender<Message>) -> anyhow::Result<()> {
+async fn ws_loop(addr: SocketAddr, mut wss_recv: SplitStream<WebSocketStream<TcpStream>>,  tx: UnboundedSender<Message>) -> anyhow::Result<()> {
     let parser = Parser{};
     loop {
         let resp = wss_recv.next().await;
         if resp.is_none() {
             return Ok(()) //should be error but anyway
         }
-        // parser.processor(addr, bytes, stream_type)
+        
         let resp = resp.unwrap()?;
-        tx.send(resp.clone()).await?;
+        let bytes = Bytes::copy_from_slice(resp.to_string().as_bytes());
+        parser.processor(addr, bytes, StreamType::Ws(tx.clone())).await?;
+        // tx.send(resp.clone()).await?;
         println!("{:?}", resp);
         if resp.is_close() {
             println!("1111112");
@@ -143,6 +132,7 @@ async fn tcp_listen() -> anyhow::Result<()> {
                         println!("recv tcp: {:?}", &buf[..n]);
                         println!("tcp write");
                         let bytes = Bytes::copy_from_slice(&buf[..n]);
+                        parser.processor(addr, bytes, StreamType::Tcp(tcp_stream.clone())).await?;
                     }
                     Err(e) => {
                         println!("failed to read from socket; err = {:?}", e);
@@ -166,12 +156,27 @@ enum StreamType {
     Tcp(TcpStream),
     Ws(UnboundedSender<Message>),
 }
+
+async fn send( stream_type: StreamType, addr: SocketAddr, bytes: Bytes) -> anyhow::Result<()> {
+    match stream_type {
+        StreamType::Tcp(mut stream) => {
+            stream.write_all(&bytes.slice(..)).await?;
+        },
+        StreamType::Ws(mut stream) => {
+            stream.send(Message::Binary(bytes.to_vec())).await?;
+        },
+    }
+    Ok(())
+    // Ok(())
+}
 struct Parser {}
 
 impl Parser {
     
-     async fn processor(&self, addr: SocketAddr, bytes: Bytes, stream_type: StreamType) {
+     async fn processor(&self, addr: SocketAddr, bytes: Bytes, stream_type: StreamType) -> anyhow::Result<()> {
         println!("parser processor {:?}, {:?}", addr, bytes);
+        send(stream_type, addr, Bytes::copy_from_slice(b"i'm proc")).await?;
         // send(stream_type, addr, Bytes::copy_from_slice(b"i'm proc")).await;
+        Ok(())
     }
 }
