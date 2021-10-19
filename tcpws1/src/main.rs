@@ -49,14 +49,14 @@ async fn ws_listen() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn send_recver(mut recv:  UnboundedReceiver<Message>) -> anyhow::Result<()> {
+async fn send_recver(mut recv:  Arc<Mutex<UnboundedReceiver<Message>>>) -> anyhow::Result<()> {
     loop {
         
-        let data = recv.try_next()?;
+        let data = recv.lock().await.try_next()?;
         match data {
             Option::Some(d) => {
                 println!("recv!!: {}", d);
-                break;
+                // break;
             },
             Option::None => {
                 println!("none!!");
@@ -92,9 +92,9 @@ async fn accept_connection(stream: TcpStream) -> anyhow::Result<()> {
     let (write, read) = ws_stream.split();
     let (tx, rx) = unbounded::<Message>(); 
     
-    let sender = send_recver(rx);
+    let rx = Arc::new(Mutex::new(rx));
+    let sender = send_recver(Arc::clone(&rx));
     let fut = read.try_for_each(move |msg| {
-        
         println!("dddd {:?}", msg);
         if msg.is_close() {
             println!("socket is closed");
