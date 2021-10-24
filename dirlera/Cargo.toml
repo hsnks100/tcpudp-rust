@@ -13,3 +13,6 @@ bytes = "*"
 anyhow = "*"
 pin-project = "*"
 async-trait = "0.1.51"
+bincode = "*"
+serde = { version = "*", features = ["derive"] }
+
