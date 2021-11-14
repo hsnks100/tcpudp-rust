@@ -1,0 +1,59 @@
+pub mod x086;
+// pub mod global;
+pub mod network;
+pub mod processor;
+pub mod user_channel;
+// pub mod global;
+use crate::user_channel::*;
+use anyhow::*;
+use std::collections::HashMap;
+
+fn testf() -> anyhow::Result<()> {
+    let mut uc = Userchannel {
+        users: HashMap::new(),
+        channels: HashMap::new(),
+    };
+
+    let r = uc.add_user(
+        "1000".to_string(),
+        Userstruct {
+            id: "DIR-E".to_string(),
+            name: "".to_string(),
+            ping: 22,
+            connect_type: 3,
+            player_status: 1,
+        },
+    );
+    println!("r1: {:?}", r);
+    let r = uc.add_user(
+        "1000".to_string(),
+        Userstruct {
+            id: "DIR-E2".to_string(),
+            name: "".to_string(),
+            ping: 22,
+            connect_type: 3,
+            player_status: 1,
+        },
+    );
+    println!("r2: {:?}", r);
+    let r = uc.remove_user("1000".to_string());
+    println!("r3: {:?}", r);
+    let r = uc.remove_user("1000".to_string());
+    println!("r4: {:?}", r);
+    // assert!(uc);
+    println!("TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT");
+    println!("uc: {:?}", uc);
+    Ok(())
+}
+#[test]
+
+fn it_works() -> anyhow::Result<()> {
+    assert_eq!(2 + 2, 4);
+    let r = testf();
+    if r.is_err() {
+        // bail!("tt")
+    }
+    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%% {:?}", r);
+
+    Ok(())
+}

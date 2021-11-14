@@ -1,5 +1,5 @@
 [package]
-name = "tcpudp5"
+name = "dirlera"
 version = "0.1.0"
 authors = ["DESKTOP-07JB8LJ\\ksoo <hsnks100@gmail.com>"]
 edition = "2018"
@@ -15,4 +15,7 @@ pin-project = "*"
 async-trait = "0.1.51"
 bincode = "*"
 serde = { version = "*", features = ["derive"] }
+lazy_static = "*"
+thiserror = "*"
+
 
