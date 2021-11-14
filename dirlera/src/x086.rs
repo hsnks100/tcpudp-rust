@@ -1,6 +1,9 @@
+use std::sync::{Arc, Mutex};
+
+// use async_lock::Mutex;
+use async_std::task;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-
 
 // use crate::dirlera::global::USERCHANNEL;
 
@@ -53,7 +56,7 @@ use crate::global;
 //             let mut h1 = Vec::new();
 //             let mut n = u.name.clone() + "\0";
 //             let mut n1 = n.as_bytes();
-//             // let nn = 
+//             // let nn =
 //             h1.append(&mut n1.to_vec());
 //             h1.append(&mut u.id.as_bytes().to_vec());
 //             h1.append(&mut bincode::serialize(&u.ping).unwrap());
@@ -68,6 +71,9 @@ use crate::global;
 // }
 pub fn make_status_packet(seq: u16) -> Vec<u8> {
     // crate::global::USERCHANNEL.lock()
+    // task::block_on(async {
+    // })
+    println!("Hello, world!");
     let uc = global::USERCHANNEL.lock().unwrap();
     let header = x086_status {
         dummy0: 0,
@@ -92,8 +98,10 @@ pub fn make_status_packet(seq: u16) -> Vec<u8> {
         h1.append(&mut bincode::serialize(&uid).unwrap());
         h1.append(&mut bincode::serialize(&ps).unwrap());
     }
-    let h1 = Bytes::copy_from_slice(h1.as_slice());
-    make_packet_header_body(seq, 0x04, h1)
+    // let mut ret = ret.lock().await;
+    let mut ret = Bytes::copy_from_slice(h1.as_slice());
+    make_packet_header_body(seq, 0x04, ret)
+    // ret2.lock().await
 }
 
 pub fn make_merge_packet(vecs: Vec<Vec<u8>>) -> Vec<u8> {

@@ -9,7 +9,9 @@ use futures::AsyncReadExt;
 // use core::slice::SlicePattern;
 // use core::slice::SlicePattern;
 use crate::*;
+// use async_lock::Mutex;
 use std::sync::{Arc, Mutex};
+
 use std::thread;
 // use network;
 // use crate::network;
@@ -68,6 +70,7 @@ impl Processor {
         addr: SocketAddr,
         bytes: Bytes,
         stream_type: &crate::network::StreamType<'a>,
+        uc: Arc<Mutex<Userchannel>>,
     ) {
         println!("[{}] parser processor {:?}, {:X?}", self.id, addr, bytes);
         let v = bytes.slice(..);
@@ -113,25 +116,27 @@ impl Processor {
                     let emul = str::from_utf8(sort[1]).unwrap();
                     let conn_type = sort[2][0];
                     println!("nick: {}, emul: {}, conn_type: {}", nick, emul, conn_type);
-                    let mut uc = global::USERCHANNEL.lock().unwrap();
-                    let next_sess = uc.get_next_sess_key();
-                    uc.add_user(
-                        addr.to_string(),
-                        Userstruct {
-                            id: next_sess,
-                            name: nick.to_string(),
-                            ping: 3,
-                            connect_type: conn_type as u32,
-                            player_status: 1,
-                        },
-                    );
+                    // let mut uc = global::USERCHANNEL.lock().unwrap();
+                    {
+                        let mut uc = uc.lock().unwrap(); // .unwarp(); // await;
+                        let next_sess = uc.get_next_sess_key();
+                        uc.add_user(
+                            addr.to_string(),
+                            Userstruct {
+                                id: next_sess,
+                                name: nick.to_string(),
+                                ping: 3,
+                                connect_type: conn_type as u32,
+                                player_status: 1,
+                            },
+                        );
+                    }
                     let v1 = x086::make_server_ack(self.session_seq);
                     // println!("0x03...!!!!!!!!!!!!!!!!!!!!! {:02X?}", v1);
                     self.session_seq += 1;
                     let mut v3 = Vec::new();
                     v3.push(v1);
                     let sendData = x086::make_merge_packet(v3);
-                    // println!("0x03...!!!!222222222222 {:02X?}", sendData);
                     println!("=>ACK");
                     send(
                         stream_type,
@@ -169,7 +174,7 @@ impl Processor {
                             Bytes::copy_from_slice(sendData.as_slice()),
                         )
                         .await;
-                        
+
                         // let mut uc = global::USERCHANNEL.lock().unwrap();
                         // let u = uc.get_user(addr.to_string());
                         // if u.is_some() {

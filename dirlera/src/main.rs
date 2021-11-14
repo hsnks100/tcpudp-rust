@@ -7,6 +7,7 @@ use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
+// use async_lock::{Mutex};
 // use std::sync::Mutex;
 use crate::user_channel::*;
 
@@ -42,17 +43,17 @@ async fn entrypoint() -> anyhow::Result<()> {
 }
 fn main() -> anyhow::Result<()> {
     {
-        let mut uc = global::USERCHANNEL.lock().unwrap();
-        uc.add_user(
-            "1000".to_string(),
-            Userstruct {
-                id: "100".to_string(),
-                name: "DIR-E".to_string(),
-                ping: 3,
-                connect_type: 3,
-                player_status: 1,
-            },
-        )?;
+        // let mut uc = global::USERCHANNEL.lock().await;
+        // uc.add_user(
+        //     "1000".to_string(),
+        //     Userstruct {
+        //         id: "100".to_string(),
+        //         name: "DIR-E".to_string(),
+        //         ping: 3,
+        //         connect_type: 3,
+        //         player_status: 1,
+        //     },
+        // )?;
     }
     // let uc = USERCHANNEL.lock().unwrap();
     // let f = x086::make_packet_header_body(3, 0x12, v);
@@ -71,6 +72,7 @@ async fn tcp_listen() -> anyhow::Result<()> {
     let tcp_listener = net::TcpListener::bind("0.0.0.0:4444").await?;
     while let Ok((tcp_stream, addr)) = tcp_listener.accept().await {
         println!("tcp connected {}", addr);
+
         let mut tcp_stream = tcp_stream;
         async_std::task::spawn(async move {
             let mut parser = processor::Processor {
@@ -97,7 +99,9 @@ async fn tcp_listen() -> anyhow::Result<()> {
                         // let parser = parser.lock().unwrap();
                         // parser.void().await;
                         parser
-                            .process(addr, bytes, &network::StreamType::Tcp(&tcp_stream))
+                            .process(addr, bytes, 
+                                &network::StreamType::Tcp(&tcp_stream), 
+                                Arc::clone(&global::USERCHANNEL))
                             .await;
                         // parser.lock().unwrap().processor(addr, bytes, StreamType::Tcp(tcp_stream.clone())).await;
                     }
@@ -126,8 +130,11 @@ async fn udp_listen(ipport: String, init_seq: u16, parser_name: String) -> anyho
         // println!("udp data {}, {:?}", addr, &buffer[..size]);
         let bytes = Bytes::copy_from_slice(&buffer[..size]);
         // let udp_listener2 = Arc::clone(&u);
+        let vv = Arc::clone(&global::USERCHANNEL);
         parser
-            .process(addr, bytes, &network::StreamType::Udp(&udp_listener))
+            .process(addr, bytes, 
+                &network::StreamType::Udp(&udp_listener), 
+                vv)
             .await;
     }
     Ok(())

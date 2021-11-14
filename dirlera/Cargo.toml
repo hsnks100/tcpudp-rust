@@ -17,5 +17,6 @@ bincode = "*"
 serde = { version = "*", features = ["derive"] }
 lazy_static = "*"
 thiserror = "*"
+async-lock = "*"
 
 

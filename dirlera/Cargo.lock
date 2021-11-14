@@ -229,6 +229,7 @@ name = "dirlera"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-lock",
  "async-std",
  "async-trait",
  "bincode",
