@@ -10,13 +10,20 @@ pub struct Userchannel {
     pub channels: HashMap<String, Channelstruct>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Userstruct {
     pub id: String,
     pub name: String,
     pub ping: u32,
     pub connect_type: u32,
     pub player_status: u32,
+    pub ack_count: i32,
+    pub send_count: i32,
+}
+impl Userstruct {
+    pub fn set_ack_count(&mut self, i: i32) {
+        self.ack_count = i;
+    }
 }
 
 #[derive(Debug)]
@@ -39,8 +46,8 @@ impl Userchannel {
         self.users.insert(k, u);
         Ok(())
     }
-    pub fn get_user(&mut self, k: String) -> Option<&Userstruct> {
-        let r = self.users.get(&k);
+    pub fn get_user(&mut self, k: String) -> Option<&mut Userstruct> {
+        let r = self.users.get_mut(&k);
         r
     }
     pub fn remove_user(&mut self, k: String) -> anyhow::Result<()> {

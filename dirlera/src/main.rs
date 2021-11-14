@@ -79,7 +79,6 @@ async fn tcp_listen() -> anyhow::Result<()> {
             let mut parser = processor::Processor {
                 session_seq: 1,
                 id: "tcp processor".to_string(),
-                x06_count: 0,
             };
             loop {
                 let mut buf = [0; 10];
@@ -125,7 +124,6 @@ async fn udp_listen(ipport: String, init_seq: u16, parser_name: String) -> anyho
     let mut parser = processor::Processor {
         session_seq: init_seq,
         id: parser_name.clone(),
-        x06_count: 0,
     };
     while let Ok((size, addr)) = udp_listener.recv_from(&mut buffer).await {
         // println!("udp data {}, {:?}", addr, &buffer[..size]);
